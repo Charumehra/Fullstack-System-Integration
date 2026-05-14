@@ -1,84 +1,123 @@
 import React, { useState, useEffect } from 'react'
 
+const API_BASE_URL = 'http://localhost:5000/api/posts';
+
 function App() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
+  const [formData, setFormData] = useState({
+    title: '',
+    content: '',
+    image: null,
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  const readApiResponse = async (response) => {
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const serverMessage = payload?.message;
+      throw new Error(serverMessage || 'Request failed. Please try again.');
+    }
+
+    return payload;
+  };
+
+  const fetchPosts = async () => {
+    setLoading(true);
+    setFetchError('');
+
+    try {
+      const response = await fetch(API_BASE_URL);
+      const data = await readApiResponse(response);
+      setPosts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setFetchError(err.message || 'Failed to load posts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetch("http://localhost:5000/api/posts")
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then(({ ok, data }) => {
-        if (!ok) {
-          throw new Error(data.message || 'Failed to load posts');
-        }
+    fetchPosts();
+  }, []);
 
-        setPosts(data);
-      })
-      .catch((err) => {
-        setFetchError(err.message || 'Failed to load posts');
-      })
-      .finally(() => {
-        setLoading(false);
-      })
-  }, [])
+  const handleInputChange = (event) => {
+    const { name, value } = event.target;
+    setFormData((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
 
-  const handleSubmit = (event) => {
+  const handleImageChange = (event) => {
+    const selectedFile = event.target.files?.[0] || null;
+    setFormData((previous) => ({
+      ...previous,
+      image: selectedFile,
+    }));
+  };
+
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      content: '',
+      image: null,
+    });
+  };
+
+  const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (!formData.image) {
+      setError('Please upload a thumbnail image.');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     setMessage('');
 
-    fetch('http://localhost:5000/api/posts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ title, content }),
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then(({ ok, data }) => {
-        if (!ok) {
-          throw new Error(data.message || 'Failed to create post');
-        }
+    try {
+      const uploadData = new FormData();
+      uploadData.append('title', formData.title.trim());
+      uploadData.append('content', formData.content.trim());
+      uploadData.append('image', formData.image);
 
-        setPosts((currentPosts) => [data, ...currentPosts]);
-        setTitle('');
-        setContent('');
-        setMessage('Post created successfully.');
-      })
-      .catch((err) => {
-        setError(err.message);
-      })
-      .finally(() => {
-        setSubmitting(false);
+      const response = await fetch(API_BASE_URL, {
+        method: 'POST',
+        body: uploadData,
       });
+
+      const createdPost = await readApiResponse(response);
+      setPosts((currentPosts) => [createdPost, ...currentPosts]);
+      resetForm();
+      setMessage('Post created successfully.');
+    } catch (err) {
+      setError(err.message || 'Failed to create post');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     setError('');
     setMessage('');
 
-    fetch(`http://localhost:5000/api/posts/${id}`, {
-      method: 'DELETE',
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then(({ ok, data }) => {
-        if (!ok) {
-          throw new Error(data.message || 'Failed to delete post');
-        }
-
-        setPosts((currentPosts) => currentPosts.filter((post) => post._id !== id));
-        setMessage('Post deleted successfully.');
-      })
-      .catch((err) => {
-        setError(err.message);
+    try {
+      const response = await fetch(`${API_BASE_URL}/${id}`, {
+        method: 'DELETE',
       });
+
+      await readApiResponse(response);
+      setPosts((currentPosts) => currentPosts.filter((post) => post._id !== id));
+      setMessage('Post deleted successfully.');
+    } catch (err) {
+      setError(err.message || 'Failed to delete post');
+    }
   };
 
   return (
@@ -101,9 +140,10 @@ function App() {
               </label>
               <input
                 id="title"
+                name="title"
                 type="text"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
+                value={formData.title}
+                onChange={handleInputChange}
                 placeholder="Enter post title"
                 className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3.5 text-slate-900 outline-none transition duration-200 placeholder:text-slate-400 hover:border-blue-200 hover:shadow-sm focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
                 required
@@ -116,11 +156,26 @@ function App() {
               </label>
               <textarea
                 id="content"
-                value={content}
-                onChange={(event) => setContent(event.target.value)}
+                name="content"
+                value={formData.content}
+                onChange={handleInputChange}
                 placeholder="Write your post content"
                 rows="5"
                 className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3.5 text-slate-900 outline-none transition duration-200 placeholder:text-slate-400 hover:border-blue-200 hover:shadow-sm focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                required
+              />
+            </div>
+
+            <div className="space-y-2.5">
+              <label htmlFor="image" className="block text-sm font-semibold text-blue-900">
+                Thumbnail Image
+              </label>
+              <input
+                id="image"
+                type="file"
+                accept="image/*"
+                onChange={handleImageChange}
+                className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm text-slate-700 file:mr-4 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:border-blue-200 focus:outline-none focus:ring-4 focus:ring-blue-100"
                 required
               />
             </div>
@@ -170,15 +225,29 @@ function App() {
               <p className="text-sm text-blue-700">No posts yet.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:gap-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
               {posts.map((post) => (
                 <article
                   key={post._id}
-                  className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-xl sm:p-5"
+                  className="overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-xl"
                 >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="h-44 w-full bg-blue-50">
+                    {post.image ? (
+                      <img
+                        src={post.image}
+                        alt={post.title}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-sm font-medium text-blue-700">
+                        No image
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-4 p-4 sm:p-5">
                     <div className="min-w-0">
-                      <h3 className="text-lg font-semibold text-slate-950 sm:text-xl break-words">
+                      <h3 className="text-lg font-semibold text-slate-950 break-words">
                         {post.title}
                       </h3>
                       <p className="mt-2 text-sm leading-6 text-slate-600 break-words">
@@ -189,7 +258,7 @@ function App() {
                     <button
                       type="button"
                       onClick={() => handleDelete(post._id)}
-                      className="inline-flex shrink-0 items-center justify-center rounded-xl border border-blue-100 px-4 py-2 text-sm font-medium text-blue-700 transition duration-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                      className="inline-flex w-full items-center justify-center rounded-xl border border-blue-100 px-4 py-2 text-sm font-medium text-blue-700 transition duration-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-100"
                     >
                       Delete
                     </button>
