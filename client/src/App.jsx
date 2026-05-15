@@ -198,7 +198,6 @@ function App() {
     if (title.length > 120) errors.title = 'Title must be under 120 characters';
 
     if (!content || content.length < 10) errors.content = 'Content must be at least 10 characters';
-    if (content.length > 10000) errors.content = 'Content is too long';
 
     if (!formData.image) errors.image = 'Please upload a thumbnail image';
 
