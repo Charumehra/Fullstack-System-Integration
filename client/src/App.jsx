@@ -9,7 +9,7 @@ import {
   Loader2,
 } from "lucide-react";
 
-const API_BASE_URL = "http://localhost:5000/api/posts";
+const API_BASE_URL = "https://fullstack-system-integration-1.onrender.com/api/posts";
 
 function App() {
   const [posts, setPosts] = useState([]);
